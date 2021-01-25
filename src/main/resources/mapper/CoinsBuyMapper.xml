@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.teachy.coin.dao.CoinsBuyMapper">
+    <resultMap id="BaseResultMap" type="com.teachy.coin.model.CoinsBuy">
+        <!--
+          WARNING - @mbg.generated
+        -->
+        <result column="symbol" jdbcType="VARCHAR" property="symbol"/>
+        <result column="price" jdbcType="VARCHAR" property="price"/>
+        <result column="sell_price" jdbcType="VARCHAR" property="sellPrice"/>
+        <result column="base_urrency" jdbcType="VARCHAR" property="baseUrrency"/>
+    </resultMap>
+
+    <delete id="deleteBySymbol">
+    delete from coins_buy where symbol=#{symbol};
+  </delete>
+</mapper>

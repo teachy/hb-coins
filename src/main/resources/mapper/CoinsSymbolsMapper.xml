@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.teachy.coin.dao.CoinsSymbolsMapper">
+    <resultMap id="BaseResultMap" type="com.teachy.coin.model.CoinsSymbols">
+        <!--
+          WARNING - @mbg.generated
+        -->
+        <id column="id" jdbcType="INTEGER" property="id"/>
+        <result column="symbol" jdbcType="VARCHAR" property="symbol"/>
+        <result column="base_currency" jdbcType="VARCHAR" property="baseCurrency"/>
+        <result column="quote_currency" jdbcType="VARCHAR" property="quoteCurrency"/>
+        <result column="price_precision" jdbcType="INTEGER" property="pricePrecision"/>
+        <result column="amount_precision" jdbcType="INTEGER" property="amountPrecision"/>
+        <result column="symbol_partition" jdbcType="VARCHAR" property="symbolPartition"/>
+        <result column="value_precision" jdbcType="INTEGER" property="valuePrecision"/>
+        <result column="leverage_ratio" jdbcType="INTEGER" property="leverageRatio"/>
+        <result column="state" jdbcType="VARCHAR" property="state"/>
+        <result column="status" jdbcType="INTEGER" property="status"/>
+    </resultMap>
+    <select id="getBySymbols" resultMap="BaseResultMap">
+    select * from coins_symbols where symbol=#{symbol}
+  </select>
+
+    <update id="disableCoin">
+    update coins_symbols set status=1 where base_currency=#{coinName}
+  </update>
+
+    <update id="enableCoin">
+    update coins_symbols set status=0 where base_currency=#{coinName} and quote_currency='usdt'
+  </update>
+
+    <select id="getEnableCoins" resultMap="BaseResultMap">
+    select * from coins_symbols where status=0 and state='online';
+  </select>
+</mapper>
