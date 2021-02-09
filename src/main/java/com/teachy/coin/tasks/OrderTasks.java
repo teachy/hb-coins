@@ -28,8 +28,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.stream.DoubleStream;
 
 import static java.util.stream.Collectors.toList;
 
@@ -38,7 +36,7 @@ import static java.util.stream.Collectors.toList;
  * @Author gang.tu
  * @Date 2021/1/9 16:38
  */
-//@Component
+@Component
 @Slf4j
 public class OrderTasks {
     @Resource
@@ -51,11 +49,12 @@ public class OrderTasks {
     HBApi hbApi;
     public static boolean isOn = true;
     public static int MAX_COINS = 15;
-    public static String BUY_MAX = "15";
+    public static String BUY_MAX = "6";
     public static String UU_ID = "null";
     List<CoinsSymbols> enableCoins = Collections.synchronizedList(new ArrayList<>());
     Map<String, String> coinNames = new HashMap<>();
     public static volatile List<CoinsSymbols> buyCoins = Collections.synchronizedList(new ArrayList<>());
+    public static volatile List<CoinsSymbols> zbBuy = Collections.synchronizedList(new ArrayList<>());
     public static volatile List<CoinsSymbols> sellCoins = Collections.synchronizedList(new ArrayList<>());
     private Long accountId = 0L;
     private Map<String, Long> buyTime = new HashMap<>();
@@ -170,7 +169,7 @@ public class OrderTasks {
                 }
                 Long aLong = buyTime.get(e.getSymbol());
                 if (aLong != null) {
-                    if (System.currentTimeMillis() - aLong < 180000) {
+                    if (System.currentTimeMillis() - aLong < 1800000) {
                         continue;
                     }
                 }
@@ -186,7 +185,7 @@ public class OrderTasks {
                 coinsBuy.setSymbol(e.getSymbol());
                 coinsBuy.setBaseUrrency(e.getBaseCurrency());
                 coinsBuy.setPrice(results.get(0).getPrice());
-                coinsBuy.setSellPrice(new BigDecimal(coinsBuy.getPrice()).multiply(new BigDecimal("0.98")).toPlainString());
+                coinsBuy.setSellPrice(new BigDecimal(coinsBuy.getPrice()).multiply(new BigDecimal("0.95")).toPlainString());
                 coinsBuyService.save(coinsBuy);
                 sellCoins.add(e);
                 buyTime.put(e.getSymbol(), System.currentTimeMillis());
@@ -212,8 +211,8 @@ public class OrderTasks {
                         double nowPrice = Double.valueOf(marketTrade.getPrice().toPlainString());
                         double sellPrice = Double.valueOf(coinsBuy.getSellPrice());
                         if (nowPrice > sellPrice) {
-                            if (nowPrice > sellPrice * 1.04) {
-                                coinsBuy.setSellPrice(marketTrade.getPrice().multiply(new BigDecimal("0.98")).toPlainString());
+                            if (nowPrice > sellPrice * 1.08) {
+                                coinsBuy.setSellPrice(marketTrade.getPrice().multiply(new BigDecimal("0.95")).toPlainString());
                                 coinsBuyService.update(coinsBuy);
                             }
                         } else {
@@ -221,6 +220,7 @@ public class OrderTasks {
                             for (Balance balance : list) {
                                 if (balance.getCurrency().equals(next.getBaseCurrency())) {
                                     doSell(next, balance);
+                                    buyTime.put(next.getSymbol(), System.currentTimeMillis());
                                     break;
                                 }
                             }
@@ -276,9 +276,8 @@ public class OrderTasks {
     private void getKline() {
         enableCoins.stream().forEach(e -> {
             if (!buyCoins.contains(e) && !sellCoins.contains(e)) {
-                List<Candlestick> candlestick = hbApi.getCandlestick(e.getSymbol(), CandlestickIntervalEnum.MIN5, 24);
-                if (isOk5min(e, candlestick)) {
-                    log.info("添加coin：{}", e.getBaseCurrency());
+                List<Candlestick> candlestick = hbApi.getCandlestick(e.getSymbol(), CandlestickIntervalEnum.DAY1, 45);
+                if (checkAmount(e, candlestick)) {
                     buyCoins.add(e);
                 }
                 try {
@@ -291,44 +290,170 @@ public class OrderTasks {
 
     }
 
-    /**
-     * 功能描述  5分钟
-     *
-     * @return boolean
-     * @author gang.tu
-     **/
-    private boolean isOk5min(CoinsSymbols coinsSymbols, List<Candlestick> candlestick) {
-        Double firstValue = Double.valueOf(candlestick.get(0).getClose().toPlainString());
-        Double openValue = Double.valueOf(candlestick.get(0).getOpen().toPlainString());
-        if ((firstValue - openValue) / openValue < 0.05 && (firstValue - openValue) / openValue > 0.3) {
-            UU_ID = "1==" + coinsSymbols.getSymbol() + ":" + UUID.randomUUID().toString();
-            return false;
+    private boolean checkAmount(CoinsSymbols coinsSymbols, List<Candlestick> candlestick) {
+        boolean f1 = false;
+        int maxI = 0;
+        for (int i = candlestick.size() - 1; i >= 35; i--) {
+            Double amount = Double.valueOf(candlestick.get(i).getAmount().toPlainString());
+            Double firstValue = Double.valueOf(candlestick.get(i).getClose().toPlainString());
+            Double openValue = Double.valueOf(candlestick.get(i).getOpen().toPlainString());
+            if (firstValue > openValue) {
+                double asDouble = candlestick.stream().limit(i + 1).mapToDouble(e -> Double.valueOf(e.getAmount().toPlainString())).max().getAsDouble();
+                if (amount == asDouble) {
+                    f1 = true;
+                    maxI = i;
+                    break;
+                }
+            } else {
+                continue;
+            }
         }
-        Double firstAmount = Double.valueOf(candlestick.get(0).getAmount().toPlainString());
-        DoubleStream doubleStreamAmount = candlestick.stream().skip(1).mapToDouble(e -> Double.valueOf(e.getAmount().toPlainString()));
-        boolean allAmountMatch = doubleStreamAmount.allMatch(e -> e < firstAmount);
-        if (!allAmountMatch) {
-            UU_ID = "2==" + coinsSymbols.getSymbol() + ":" + UUID.randomUUID().toString();
-            return false;
+        /********************************************************************************/
+
+        Double d4 = Double.valueOf(candlestick.get(4).getClose().toPlainString());
+        Double d04 = Double.valueOf(candlestick.get(4).getOpen().toPlainString());
+        Double d3 = Double.valueOf(candlestick.get(3).getClose().toPlainString());
+        Double d03 = Double.valueOf(candlestick.get(3).getOpen().toPlainString());
+        Double d2 = Double.valueOf(candlestick.get(2).getClose().toPlainString());
+        Double d02 = Double.valueOf(candlestick.get(2).getOpen().toPlainString());
+        Double d1 = Double.valueOf(candlestick.get(1).getClose().toPlainString());
+        Double d01 = Double.valueOf(candlestick.get(1).getOpen().toPlainString());
+        Double d0 = Double.valueOf(candlestick.get(0).getClose().toPlainString());
+        Double d00 = Double.valueOf(candlestick.get(0).getOpen().toPlainString());
+
+        if (f1) {
+            boolean t1 = d02 > d2;
+            boolean t2 = d01 > d1;
+            boolean t3 = (d00 - d0) / d00 > 0.10;
+            if (t1 && t2 && t3) {
+                return true;
+            }
         }
-        double sum = candlestick.stream().skip(1).mapToDouble(e -> Double.valueOf(e.getAmount().toPlainString())).sum();
-        if (firstAmount * 2 < sum) {
-            UU_ID = "3==" + coinsSymbols.getSymbol() + ":" + UUID.randomUUID().toString();
-            return false;
+        /********************************************************************************/
+        if (f1) {
+            boolean t2 = d01 > d1;
+            boolean t3 = (d00 - d0) / d00 > 0.15;
+            if (t2 && t3) {
+                return true;
+            }
         }
-        return isOk1day(coinsSymbols);
+        /********************************************************************************/
+        if (f1) {
+            boolean t3 = (d00 - d0) / d00 > 0.25;
+            if (t3) {
+                return true;
+            }
+        }
+
+        /********************************************************************************/
+
+        if (f1) {
+            boolean t4 = d04 > d4;
+            boolean t3 = d03 > d3;
+            boolean t2 = d02 > d2;
+            boolean t1 = d01 > d1;
+            boolean t0 = d00 > d0;
+            if (t4 && t3 && t2 && t1 && t0) {
+                return true;
+            }
+        }
+        /********************************************************************************/
+        if (f1) {
+            boolean t3 = d03 > d3;
+            boolean t2 = d02 > d2;
+            boolean t1 = d01 > d1;
+            boolean t0 = (d00 - d0) / d00 > 0.05;
+            if (t3 && t2 && t1 && t0) {
+                return true;
+            }
+
+        }
+        /********************************************************************************/
+        if (f1) {
+            boolean t2 = (d02 - d2) / d02 > 0.10;
+            boolean t1 = (d01 - d1) / d01 > 0.05;
+            boolean t0 = (d00 - d0) / d00 > 0.05;
+            if (t2 && t1 && t0) {
+                return true;
+            }
+        }
+        /********************************************************************************/
+        if (f1) {
+            boolean t1 = (d01 - d1) / d01 > 0.15;
+            boolean t0 = (d00 - d0) / d00 > 0.1;
+            if (t1 && t0) {
+                return true;
+            }
+        }
+        /********************************************************************************/
+        if (f1) {
+            boolean t3 = d03 > d3;
+            boolean t2 = (d02 - d2) / d02 > 0.1;
+            boolean t1 = (d1 - d01) / d01 > 0 && (d1 - d01) / d01 < 0.03;
+            boolean t0 = d0 < d00;
+            if (t3 && t2 && t1 && t0) {
+                return true;
+            }
+        }
+        /********************************************************************************/
+        if (true) {
+            boolean t4 = d04 > d4;
+            boolean t3 = d03 > d3;
+            boolean t2 = d02 > d2;
+            boolean t1 = d01 > d1;
+            boolean t0 = (d00 - d0) / d00 > 0.05;
+            if (t4 && t3 && t2 && t1 && t0) {
+                return true;
+            }
+
+            t3 = d03 > d3;
+            t2 = d02 > d2;
+            t1 = d01 > d1;
+            t0 = (d00 - d0) / d00 > 0.1;
+            if (t3 && t2 && t1 && t0) {
+                return true;
+            }
+
+            t2 = d02 > d2;
+            t1 = d01 > d1;
+            t0 = (d00 - d0) / d00 > 0.15;
+            if (t2 && t1 && t0) {
+                return true;
+            }
+
+            t4 = d04 > d4;
+            t3 = d03 > d3;
+            t2 = d02 > d2 && (d04 - d2) / d04 > 0.2;
+            t1 = (d1 - d01) / d01 > 0 && (d1 - d01) / d01 < 0.03;
+            t0 = (d00 - d0) / d00 > 0.05;
+            if (t4 && t3 && t2 && t1 && t0) {
+                return true;
+            }
+
+            t0 = ((d0 - d00) / d00 > 0.01) && ((d0 - d00) / d00 < 0.05);
+            if (t0) {
+                t1 = d01 > d1 && (d01 - d1) / d01 > 0.06;
+                if (t1) {
+                    return true;
+                }
+                t1 = (d02 - d1) / d02 > 0.8;
+                if (t1) {
+                    return true;
+                }
+                t1 = (d03 - d1) / d02 > 0.12;
+                if (t1) {
+                    return true;
+                }
+                t1 = (d04 - d1) / d02 > 0.15;
+                if (t1) {
+                    return true;
+                }
+            }
+
+        }
+        /********************************************************************************/
+
+        return false;
     }
 
-    /**
-     * 功能描述 1天
-     *
-     * @return boolean
-     * @author gang.tu
-     **/
-    private boolean isOk1day(CoinsSymbols coinsSymbols) {
-        List<Candlestick> candlestick = hbApi.getCandlestick(coinsSymbols.getSymbol(), CandlestickIntervalEnum.DAY1, 5);
-        Double firstValue = Double.valueOf(candlestick.get(0).getClose().toPlainString());
-        DoubleStream doubleStreamValue = candlestick.stream().skip(1).mapToDouble(e -> Double.valueOf(e.getClose().toPlainString()));
-        return doubleStreamValue.allMatch(e -> ((firstValue - e) / e) < 0.3);
-    }
 }
