@@ -3,6 +3,7 @@ package com.teachy.coin.tasks;
 import com.teachy.coin.huobi.HBApi;
 import com.teachy.coin.huobi.client.req.trade.CreateOrderRequest;
 import com.teachy.coin.huobi.constant.enums.CandlestickIntervalEnum;
+import com.teachy.coin.huobi.exception.SDKException;
 import com.teachy.coin.huobi.model.account.Account;
 import com.teachy.coin.huobi.model.account.Balance;
 import com.teachy.coin.huobi.model.market.Candlestick;
@@ -16,6 +17,7 @@ import com.teachy.coin.service.CoinsMatchResultsService;
 import com.teachy.coin.service.CoinsSymbolsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -49,7 +51,8 @@ public class OrderTasks {
     HBApi hbApi;
     public static boolean isOn = true;
     public static int MAX_COINS = 15;
-    public static String BUY_MAX = "6";
+    @Value("${coin.max}")
+    public String BUY_MAX;
     public static String UU_ID = "null";
     List<CoinsSymbols> enableCoins = Collections.synchronizedList(new ArrayList<>());
     Map<String, String> coinNames = new HashMap<>();
@@ -169,7 +172,7 @@ public class OrderTasks {
                 }
                 Long aLong = buyTime.get(e.getSymbol());
                 if (aLong != null) {
-                    if (System.currentTimeMillis() - aLong < 1800000) {
+                    if (System.currentTimeMillis() - aLong < 14400000) {
                         continue;
                     }
                 }
@@ -210,7 +213,8 @@ public class OrderTasks {
                     if (coinsBuy != null) {
                         double nowPrice = Double.valueOf(marketTrade.getPrice().toPlainString());
                         double sellPrice = Double.valueOf(coinsBuy.getSellPrice());
-                        if (nowPrice > sellPrice) {
+                        double buyPrice = Double.valueOf(coinsBuy.getPrice());
+                        if (nowPrice > sellPrice && nowPrice > buyPrice * 0.97) {
                             if (nowPrice > sellPrice * 1.08) {
                                 coinsBuy.setSellPrice(marketTrade.getPrice().multiply(new BigDecimal("0.95")).toPlainString());
                                 coinsBuyService.update(coinsBuy);
@@ -238,9 +242,15 @@ public class OrderTasks {
     void doSell(CoinsSymbols coinsSymbols, Balance balance) {
         log.info("sell coin：{}", coinsSymbols.getBaseCurrency());
         CreateOrderRequest createOrderRequest = CreateOrderRequest.spotSellMarket(accountId, coinsSymbols.getSymbol(), balance.getBalance().setScale(coinsSymbols.getAmountPrecision(), BigDecimal.ROUND_DOWN));
-        Long sellMarketId = hbApi.createOrder(createOrderRequest);
-        insertResults(coinsSymbols, sellMarketId);
-        coinsBuyService.deleteBySymbol(coinsSymbols.getSymbol());
+        try {
+            Long sellMarketId = hbApi.createOrder(createOrderRequest);
+            insertResults(coinsSymbols, sellMarketId);
+            coinsBuyService.deleteBySymbol(coinsSymbols.getSymbol());
+        } catch (SDKException e) {
+            if (e.getMessage().contains("amount")) {
+                coinsBuyService.deleteBySymbol(coinsSymbols.getSymbol());
+            }
+        }
     }
 
 
@@ -430,7 +440,7 @@ public class OrderTasks {
                 return true;
             }
 
-            t0 = ((d0 - d00) / d00 > 0.01) && ((d0 - d00) / d00 < 0.05);
+            t0 = ((d0 - d00) / d00 > 0.03) && ((d0 - d00) / d00 < 0.07) && (d01 > d1);
             if (t0) {
                 t1 = d01 > d1 && (d01 - d1) / d01 > 0.06;
                 if (t1) {
