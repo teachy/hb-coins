@@ -33,8 +33,10 @@ public class CoinsSymbolsServiceImpl extends AbstractService<CoinsSymbols> imple
             BeanUtils.copyProperties(symbol, coinsSymbols);
             CoinsSymbols coinsSymbol = coinsSymbolsMapper.getBySymbols(coinsSymbols.getSymbol());
             if (coinsSymbol == null) {
-                coinsSymbols.setStatus(0);
-                coinsSymbolsMapper.insert(coinsSymbols);
+                if(symbol.getQuoteCurrency().equals("usdt")){
+                    coinsSymbols.setStatus(0);
+                    coinsSymbolsMapper.insert(coinsSymbols);
+                }
             } else {
                 coinsSymbols.setId(coinsSymbol.getId());
                 coinsSymbols.setStatus(coinsSymbol.getStatus());

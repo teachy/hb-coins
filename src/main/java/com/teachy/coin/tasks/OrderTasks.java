@@ -62,7 +62,7 @@ public class OrderTasks {
     private Long accountId = 0L;
     private Map<String, Long> buyTime = new HashMap<>();
 
-    @PostConstruct
+   // @PostConstruct
     void init() {
         List<Account> accounts = hbApi.accountList();
         for (Account account : accounts) {
@@ -111,7 +111,7 @@ public class OrderTasks {
      * @return void
      * @author gang.tu
      **/
-    @Scheduled(cron = "*/1 * * * * ?")
+  //  @Scheduled(cron = "*/1 * * * * ?")
     public void begin() {
         if (isOn && sellCoins.size() < MAX_COINS) {
             getKline();
@@ -131,7 +131,7 @@ public class OrderTasks {
      * @return void
      * @author gang.tu
      **/
-    @Scheduled(cron = "*/1 * * * * ?")
+  //  @Scheduled(cron = "*/1 * * * * ?")
     public void buy() {
         if (isOn) {
             dealBuyCoins();
@@ -150,7 +150,7 @@ public class OrderTasks {
      * @return void
      * @author gang.tu
      **/
-    @Scheduled(cron = "*/1 * * * * ?")
+   // @Scheduled(cron = "*/1 * * * * ?")
     public void sell() {
         if (isOn) {
             dealSellCoins();
