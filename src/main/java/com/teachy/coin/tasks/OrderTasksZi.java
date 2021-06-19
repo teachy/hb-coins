@@ -24,10 +24,8 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.math.BigDecimal;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -41,9 +39,9 @@ import static java.util.stream.Collectors.toList;
  * @Author gang.tu
  * @Date 2021/1/9 16:38
  */
-@Component
+//@Component
 @Slf4j
-public class OrderTasksNEW {
+public class OrderTasksZi {
     @Resource
     CoinsSymbolsService soinsSymbolsService;
     @Resource

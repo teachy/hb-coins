@@ -24,10 +24,8 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.math.BigDecimal;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -41,9 +39,9 @@ import static java.util.stream.Collectors.toList;
  * @Author gang.tu
  * @Date 2021/1/9 16:38
  */
-@Component
+//@Component
 @Slf4j
-public class OrderTasksNEW {
+public class OrderTaskTest {
     @Resource
     CoinsSymbolsService soinsSymbolsService;
     @Resource
@@ -52,7 +50,7 @@ public class OrderTasksNEW {
     CoinsMatchResultsService coinsMatchResultsService;
     @Resource
     HBApi hbApi;
-    public static int MAX_COINS = 20;
+    public static int MAX_COINS = 10;
     @Value("${coin.max}")
     public String BUY_MAX;
     public static String UU_ID = "null";
@@ -115,7 +113,8 @@ public class OrderTasksNEW {
      * @return void
      * @author gang.tu
      **/
-    @Scheduled(cron = "0 57 23 * * ?")
+//    @Scheduled(cron = "0 57 23 * * ?")
+    @Scheduled(cron = "*/1 * * * * ?")
     public void begin() {
         log.info("开始买");
         beginSell = false;
@@ -181,14 +180,15 @@ public class OrderTasksNEW {
         enableCoins.stream().forEach(e -> {
             try {
                 List<Candlestick> candlestick = hbApi.getCandlestick(e.getSymbol(), CandlestickIntervalEnum.DAY1, 60);
+                candlestick=candlestick.stream().skip(1).collect(toList());
                 Double aDouble = checkAmount(candlestick);
-                if (maxMap.size() < 10) {
+                if (maxMap.size() < 15) {
                     maxMap.put(aDouble, e);
                 } else {
                     Set<Double> keys = maxMap.keySet();
                     Double min = keys.stream().mapToDouble(eve -> eve).min().getAsDouble();
                     if (min < aDouble) {
-                        if (buyMap.size() < MAX_COINS) {
+                        if (buyMap.size() < 10) {
                             buyMap.put(min, maxMap.get(min));
                         } else {
                             Set<Double> keys1 = buyMap.keySet();
@@ -207,14 +207,14 @@ public class OrderTasksNEW {
                 interruptedException.printStackTrace();
             }
         });
-        buyMap.values().stream().forEach(e -> buyCoins.add(e));
-        dealBuyCoins();
-        buyMap.clear();
-        maxMap.clear();
-        buyCoins.clear();
-        while (!beginSell) {
-            sellFirst();
-        }
+        buyMap.values().stream().forEach(e -> System.out.println(e.getBaseCurrency()));
+//        dealBuyCoins();
+//        buyMap.clear();
+//        maxMap.clear();
+//        buyCoins.clear();
+//        while (!beginSell) {
+//            sellFirst();
+//        }
         log.info("退出卖出点");
     }
 
