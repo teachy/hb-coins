@@ -6,6 +6,7 @@ import com.teachy.coin.huobi.constant.enums.CandlestickIntervalEnum;
 import com.teachy.coin.huobi.exception.SDKException;
 import com.teachy.coin.huobi.model.account.Account;
 import com.teachy.coin.huobi.model.account.Balance;
+import com.teachy.coin.huobi.model.generic.Symbol;
 import com.teachy.coin.huobi.model.market.Candlestick;
 import com.teachy.coin.huobi.model.market.MarketTrade;
 import com.teachy.coin.huobi.model.trade.MatchResult;
@@ -24,13 +25,16 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.stream.Collectors.toList;
 
@@ -39,7 +43,7 @@ import static java.util.stream.Collectors.toList;
  * @Author gang.tu
  * @Date 2021/1/9 16:38
  */
-//@Component
+@Component
 @Slf4j
 public class OrderTasksZi {
     @Resource
@@ -55,7 +59,8 @@ public class OrderTasksZi {
     public String BUY_MAX;
     public static String UU_ID = "null";
     List<CoinsSymbols> enableCoins = Collections.synchronizedList(new ArrayList<>());
-    Map<String, String> coinNames = new HashMap<>();
+    List<CoinsSymbols> enableAllCoins = Collections.synchronizedList(new ArrayList<>());
+    Map<String, String> coinNames = new ConcurrentHashMap<>();
     public static volatile List<CoinsSymbols> buyCoins = Collections.synchronizedList(new ArrayList<>());
     public static volatile List<CoinsSymbols> sellCoins = Collections.synchronizedList(new ArrayList<>());
     private Long accountId = 0L;
@@ -73,10 +78,68 @@ public class OrderTasksZi {
                 break;
             }
         }
-        enableCoins = soinsSymbolsService.getEnableCoins();
+        log.info("初始化");
+        getCoins();
         enableCoins.stream().forEach(e -> coinNames.put(e.getBaseCurrency(), e.getSymbol()));
+        log.info("可用个数：{}", enableCoins.size());
         initSellCoins();
     }
+
+
+    /**
+     * 功能描述 定时找寻有用数据
+     *
+     * @return void
+     * @author gang.tu
+     **/
+    @Scheduled(cron = "0 50 0 * * ?")
+    public void beginGetCoins() {
+        log.info("更新数据");
+        getCoins();
+        enableCoins.stream().forEach(e -> coinNames.put(e.getBaseCurrency(), e.getSymbol()));
+    }
+
+    /**
+     * 功能描述 定时找寻有用数据
+     *
+     * @return void
+     * @author gang.tu
+     **/
+    @Scheduled(cron = "0 57 23 * * ?")
+    public void begin() {
+        log.info("开始买");
+        beginSell = false;
+        getKline();
+    }
+
+    /**
+     * 功能描述 定时sell
+     *
+     * @return void
+     * @author gang.tu
+     **/
+    @Scheduled(cron = "0 10 0 * * ?")
+    public void sell() {
+        beginSell = true;
+        while (sellCoins.size() > 0) {//如果没有卖完将会一直卖  --无法退出
+            sellFirst();
+        }
+        log.info("结束");
+    }
+
+    private void getCoins() {
+        List<Symbol> symbols = hbApi.getSymbols();
+        enableAllCoins.clear();
+        symbols.stream().forEach(symbol -> {
+            CoinsSymbols coinsSymbols = new CoinsSymbols();
+            BeanUtils.copyProperties(symbol, coinsSymbols);
+            if (symbol.getQuoteCurrency().equals("usdt")) {
+                enableAllCoins.add(coinsSymbols);
+            }
+        });
+        getEnableCoins();
+    }
+
 
     public void initSellCoins() {
         List<Balance> list = hbApi.getBalances(accountId).stream().filter(e -> coinNames.containsKey(e.getCurrency())).collect(toList());
@@ -106,68 +169,38 @@ public class OrderTasksZi {
         }
     }
 
-
-    /**
-     * 功能描述 定时找寻有用数据
-     *
-     * @return void
-     * @author gang.tu
-     **/
-    @Scheduled(cron = "0 57 23 * * ?")
-    public void begin() {
-        log.info("开始买");
-        beginSell = false;
-        getKline();
-    }
-
-    /**
-     * 功能描述 定时sell
-     *
-     * @return void
-     * @author gang.tu
-     **/
-    @Scheduled(cron = "0 10 0 * * ?")
-    public void sell() {
-        beginSell = true;
-        while (sellCoins.size() > 0) {//如果没有卖完将会一直卖  --无法退出
-            dealSellCoins();
+    public void getEnableCoins() {
+        List<CoinsSymbols> temp = new ArrayList<>();
+        enableAllCoins.stream().forEach(e -> {
+            try {
+                List<Candlestick> candlestick = hbApi.getCandlestick(e.getSymbol(), CandlestickIntervalEnum.MIN60, 1000);
+                int count = 0;
+                for (int i = candlestick.size() - 1; i >= 0; i--) {
+                    SimpleDateFormat simpleDateFormat = new SimpleDateFormat("HH:mm:ss");
+                    long lt = new Long(candlestick.get(i).getId());
+                    lt = lt * 1000;
+                    Date date = new Date(lt);
+                    String res = simpleDateFormat.format(date);
+                    if (res.startsWith("00")) {
+                        Double hi = Double.valueOf(candlestick.get(i).getHigh().toPlainString());
+                        Double open = Double.valueOf(candlestick.get(i).getOpen().toPlainString());
+                        if ((hi - open) / open > 0.3) {
+                            count++;
+                        }
+                    }
+                }
+                if (count > 0) {
+                    temp.add(e);
+                }
+                Thread.sleep(100);
+            } catch (Exception interruptedException) {
+            }
+        });
+        if (temp.size() > 50) {
+            enableCoins.clear();
+            enableCoins.addAll(temp);
         }
-        log.info("结束");
     }
-
-
-//    @Scheduled(cron = "*/1 * * * * ?")//测试专用
-//    public void test() {
-//
-//        enableCoins.stream().forEach(e -> {
-//            try {
-//                List<Candlestick> candlestick = hbApi.getCandlestick(e.getSymbol(), CandlestickIntervalEnum.MIN60, 1800);
-//                int count = 0;
-//                for (int i = candlestick.size() - 1; i >= 0; i--) {
-//                    SimpleDateFormat simpleDateFormat = new SimpleDateFormat("HH:mm:ss");
-//                    long lt = new Long(candlestick.get(i).getId());
-//                    lt = lt * 1000;
-//                    Date date = new Date(lt);
-//                    String res = simpleDateFormat.format(date);
-//                    if (res.startsWith("00")) {
-//                        Double hi = Double.valueOf(candlestick.get(i).getHigh().toPlainString());
-//                        Double open = Double.valueOf(candlestick.get(i).getOpen().toPlainString());
-//                        if ((hi - open) / open > 0.3) {
-//                            count++;
-//                        }
-//                    }
-//                }
-//                if (count == 0) {
-//                    soinsSymbolsService.disableCoin(e.getBaseCurrency());
-//                }
-//                System.out.println(e.getBaseCurrency() + ":" + count);
-//                Thread.sleep(100);
-//            } catch (Exception interruptedException) {
-//                interruptedException.printStackTrace();
-//            }
-//        });
-//
-//    }
 
     /**
      * 功能描述 K线分析
@@ -180,7 +213,7 @@ public class OrderTasksZi {
             try {
                 List<Candlestick> candlestick = hbApi.getCandlestick(e.getSymbol(), CandlestickIntervalEnum.DAY1, 60);
                 Double aDouble = checkAmount(candlestick);
-                if (maxMap.size() < 10) {
+                if (maxMap.size() < 15) {
                     maxMap.put(aDouble, e);
                 } else {
                     Set<Double> keys = maxMap.keySet();
@@ -214,41 +247,6 @@ public class OrderTasksZi {
             sellFirst();
         }
         log.info("退出卖出点");
-    }
-
-
-    void dealSellCoins() {
-        Iterator<CoinsSymbols> iterator = sellCoins.iterator();
-        while (iterator.hasNext()) {
-            try {
-                Thread.sleep(200);
-                CoinsSymbols next = null;
-                try {
-                    next = iterator.next();
-                } catch (Exception ee) {
-                    return;
-                }
-                MarketTrade marketTrade = hbApi.getMarketTrade(next.getSymbol()).get(0);
-                CoinsBuy coinsBuy = coinsBuyService.findBy("baseUrrency", next.getBaseCurrency());
-                if (coinsBuy != null) {
-                    double nowPrice = Double.valueOf(marketTrade.getPrice().toPlainString());
-                    double sellPrice = Double.valueOf(coinsBuy.getSellPrice());
-                    double buyPrice = Double.valueOf(coinsBuy.getPrice());
-                    if (nowPrice < sellPrice || nowPrice > buyPrice * 1.03) {
-                        List<Balance> list = hbApi.getBalances(accountId).stream().filter(e -> coinNames.containsKey(e.getCurrency())).collect(toList());
-                        for (Balance balance : list) {
-                            if (balance.getCurrency().equals(next.getBaseCurrency())) {
-                                doSell(next, balance);
-                                break;
-                            }
-                        }
-                        iterator.remove();
-                    }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     void sellFirst() {

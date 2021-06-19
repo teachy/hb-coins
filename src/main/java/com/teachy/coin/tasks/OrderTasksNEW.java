@@ -41,7 +41,7 @@ import static java.util.stream.Collectors.toList;
  * @Author gang.tu
  * @Date 2021/1/9 16:38
  */
-@Component
+//@Component
 @Slf4j
 public class OrderTasksNEW {
     @Resource
